@@ -1,16 +1,25 @@
 # Direct Stability Parameters Change Module (DSPC)
 
-A module for MakerDAO that enables direct changes to stability parameters (duty) for collateral types through a simple, secure interface.
+A module for MakerDAO that enables direct changes to stability parameters (duty, dsr, ssr) through a simple, secure interface with proper constraints and timelocks.
 
 ## Overview
 
-The DSPC module provides a streamlined way to modify stability fees for different collateral types in the Maker Protocol. It interfaces directly with the Jug contract and includes proper access controls.
+The DSPC module provides a streamlined way to modify stability parameters in the Maker Protocol, including:
+- Stability fees (duty) for different collateral types via the Jug contract
+- Dai Savings Rate (DSR) via the Pot contract
+- Staked Dai Savings Rate (SSR) via the sUSD contract
 
 ## Features
 
-- Direct stability fee modifications for any collateral type
-- Owner-based access control
-- Event emission for all parameter changes
+- Batch updates for multiple rate changes
+- Two-level access control:
+  - Admins can configure the module
+  - Facilitators can propose and execute rate changes
+- Rate change constraints:
+  - Min/max caps per rate
+  - Maximum change (gap) per update
+- Timelock for all rate changes
+- Event emission for all actions
 - Simple, auditable implementation
 
 ## Installation
@@ -27,19 +36,58 @@ forge test
 
 ## Usage
 
-1. Deploy the contract with the Jug contract address:
+1. Deploy the contract with the required addresses:
 ```solidity
-DSPC dspc = new DSPC(jugAddress);
+DSPC dspc = new DSPC(
+    jugAddress,  // For stability fees
+    potAddress,  // For DSR
+    susdsAddress, // For SSR
+    convAddress  // For rate conversions
+);
 ```
 
-2. Call the `file` function to modify stability fees:
+2. Configure the module parameters:
 ```solidity
-dspc.file("ETH-A", 1.05e27); // Sets 5% stability fee for ETH-A
+// Set timelock duration
+dspc.file("lag", 1 days);
+
+// Configure constraints for a collateral type
+dspc.file("ETH-A", "loCapBps", 1);     // Min rate: 0.01%
+dspc.file("ETH-A", "hiCapBps", 1000);  // Max rate: 10%
+dspc.file("ETH-A", "gapBps", 100);     // Max change: 1%
+
+// Configure constraints for DSR
+dspc.file("DSR", "loCapBps", 1);    // Min rate: 0.01%
+dspc.file("DSR", "hiCapBps", 800);  // Max rate: 8%
+dspc.file("DSR", "gapBps", 50);     // Max change: 0.5%
+```
+
+3. Add facilitators who can propose and execute rate changes:
+```solidity
+dspc.kiss(facilitatorAddress);
+```
+
+4. Propose a batch of rate changes:
+```solidity
+DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](2);
+updates[0] = DSPC.ParamChange("ETH-A", 150);  // Set ETH-A rate to 1.5%
+updates[1] = DSPC.ParamChange("DSR", 75);     // Set DSR to 0.75%
+dspc.put(updates);
+```
+
+5. After the timelock period, execute the changes:
+```solidity
+dspc.zap();
 ```
 
 ## Security
 
-The module implements a simple but effective authorization system where only the owner can make changes. The owner can be transferred to a new address if needed.
+The module implements a robust security model:
+- Two-level access control (admins and facilitators)
+- Rate constraints to prevent extreme changes
+- Timelock for all rate modifications
+- Circuit breaker (halt) functionality
+- All actions emit events for transparency
 
 ## License
 
