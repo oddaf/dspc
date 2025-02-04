@@ -23,17 +23,7 @@ interface ConvLike {
 /// @title Direct Stability Parameters Change Module
 /// @notice A module that allows direct changes to stability parameters with constraints
 contract DSPC {
-    // --- Math ---
-    uint256 internal constant RAY = 10 ** 27;
-    uint256 internal constant WAD = 10 ** 18;
-    uint256 internal constant BASIS_POINTS = 10000;
-
-    // --- Auth ---
-    mapping(address => uint256) public wards; // Admins
-    mapping(address => uint256) public buds; // Facilitators
-    uint256 public bad; // Circuit breaker
-
-    // --- Data ---
+    // --- Structs ---
     struct Cfg {
         uint16 loCapBps; // Minimum rate in basis points
         uint16 hiCapBps; // Maximum rate in basis points
@@ -45,17 +35,25 @@ contract DSPC {
         uint256 bps; // New rate in basis points
     }
 
+    // --- Constants ---
+    uint256 internal constant RAY = 10 ** 27;
+    uint256 internal constant WAD = 10 ** 18;
+    uint256 internal constant BASIS_POINTS = 10000;
+
+    // --- Immutables ---
     JugLike public immutable jug; // Stability fee rates
     PotLike public immutable pot; // DSR rate
     SUSDSLike public immutable susds; // SSR rate
     ConvLike public immutable conv; // Rate conversion utility
 
-    uint256 public lag; // Timelock duration
+    // --- Storage Variables ---
+    mapping(address => uint256) public wards; // Admins
+    mapping(address => uint256) public buds; // Facilitators
     mapping(bytes32 => Cfg) private _cfgs; // Constraints per rate
-
-    // Pending rate updates
-    ParamChange[] private _batch;
-    uint256 public eta; // Timestamp when the current batch can be executed
+    ParamChange[] private _batch; // Pending rate updates
+    uint8 public bad; // Circuit breaker
+    uint32 public lag; // Timelock duration
+    uint64 public eta; // Timestamp when the current batch can be executed
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -126,16 +124,17 @@ contract DSPC {
         emit Diss(usr);
     }
 
-    /// @notice Disable the module (circuit breaker)
-    /// @dev Once halted, no new rate updates can be proposed or executed
-    function halt() external auth {
-        bad = 1;
-        emit Halt();
-    }
-
     /// @notice Configure module parameters
     function file(bytes32 what, uint256 data) external auth {
-        if (what == "lag") lag = data;
+        if (what == "lag") {
+            require(data <= type(uint32).max, "DSPC/lag-overflow");
+            lag = uint32(data);
+        }
+        else if (what == "bad") {
+            require(data <= 1, "DSPC/invalid-bad-value");
+            bad = uint8(data);
+            if (data == 1) emit Halt();
+        }
         else revert("DSPC/file-unrecognized-param");
         emit File(what, data);
     }
@@ -202,7 +201,7 @@ contract DSPC {
         for (uint256 i = 0; i < updates.length; i++) {
             _batch.push(updates[i]);
         }
-        eta = block.timestamp + lag;
+        eta = uint64(block.timestamp + lag);
 
         emit Put(updates, eta);
     }

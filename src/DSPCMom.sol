@@ -6,7 +6,7 @@ interface AuthorityLike {
 }
 
 interface DSPCLike {
-    function halt() external;
+    function file(bytes32 what, uint256 data) external;
 }
 
 /// @title DSPC Mom - Emergency shutdown for DSPC
@@ -72,7 +72,7 @@ contract DSPCMom {
     /// @notice Halt the DSPC module without enforcing the GSM delay
     /// @param dspc The DSPC contract to halt
     function halt(address dspc) external auth {
-        DSPCLike(dspc).halt();
+        DSPCLike(dspc).file("bad", 1);
         emit Halt(dspc);
     }
 }

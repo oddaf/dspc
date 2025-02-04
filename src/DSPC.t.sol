@@ -228,7 +228,7 @@ contract DSPCTest is Test, RatesMock {
     }
 
     function test_halt() public {
-        dspc.halt();
+        dspc.file("bad", 1);
         assertEq(dspc.bad(), 1);
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
