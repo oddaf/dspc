@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
-import { DSPC } from "./DSPC.sol";
-import { Rates } from "./test/Rates.sol";
+import {Test} from "forge-std/Test.sol";
+import {DSPC} from "./DSPC.sol";
+import {Rates} from "./test/Rates.sol";
 
 contract MockJug {
     mapping(bytes32 => uint256) public duty;
+
     function file(bytes32 ilk, bytes32 what, uint256 data) external {
         require(what == "duty", "MockJug/invalid-what");
         duty[ilk] = data;
     }
+
     function ilks(bytes32 ilk) external view returns (uint256, uint256) {
         return (duty[ilk], 0);
     }
@@ -18,6 +20,7 @@ contract MockJug {
 
 contract MockPot {
     uint256 public dsr;
+
     function file(bytes32 what, uint256 data) external {
         require(what == "dsr", "MockPot/invalid-what");
         dsr = data;
@@ -26,6 +29,7 @@ contract MockPot {
 
 contract MockSUSDS {
     uint256 public ssr;
+
     function file(bytes32 what, uint256 data) external {
         require(what == "ssr", "MockSUSDS/invalid-what");
         ssr = data;
@@ -77,29 +81,24 @@ contract DSPCTest is Test {
         pot = new MockPot();
         susds = new MockSUSDS();
         conv = new MockConv();
-        dspc = new DSPC(
-            address(jug),
-            address(pot),
-            address(susds),
-            address(conv)
-        );
+        dspc = new DSPC(address(jug), address(pot), address(susds), address(conv));
 
         // Initialize mock rates
-        jug.file(ILK, "duty", conv.turn(100));    // 1%
-        pot.file("dsr", conv.turn(50));           // 0.5%
-        susds.file("ssr", conv.turn(75));         // 0.75%
+        jug.file(ILK, "duty", conv.turn(100)); // 1%
+        pot.file("dsr", conv.turn(50)); // 0.5%
+        susds.file("ssr", conv.turn(75)); // 0.75%
 
         // Configure the module
         dspc.file("lag", 1 days);
-        dspc.file(ILK, "loCapBps", 1);      // 0.01%
-        dspc.file(ILK, "hiCapBps", 1000);   // 10%
-        dspc.file(ILK, "gapBps", 100);      // 1%
-        dspc.file("DSR", "loCapBps", 1);    // 0.01%
-        dspc.file("DSR", "hiCapBps", 800);  // 8%
-        dspc.file("DSR", "gapBps", 50);     // 0.5%
-        dspc.file("SSR", "loCapBps", 1);    // 0.01%
-        dspc.file("SSR", "hiCapBps", 800);  // 8%
-        dspc.file("SSR", "gapBps", 50);     // 0.5%
+        dspc.file(ILK, "loCapBps", 1); // 0.01%
+        dspc.file(ILK, "hiCapBps", 1000); // 10%
+        dspc.file(ILK, "gapBps", 100); // 1%
+        dspc.file("DSR", "loCapBps", 1); // 0.01%
+        dspc.file("DSR", "hiCapBps", 800); // 8%
+        dspc.file("DSR", "gapBps", 50); // 0.5%
+        dspc.file("SSR", "loCapBps", 1); // 0.01%
+        dspc.file("SSR", "hiCapBps", 800); // 8%
+        dspc.file("SSR", "gapBps", 50); // 0.5%
 
         // Add alice as a facilitator
         dspc.kiss(alice);
@@ -144,9 +143,9 @@ contract DSPCTest is Test {
 
     function test_put() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 150);    // From 1% to 1.5% (within 1% gap)
-        updates[1] = DSPC.ParamChange("DSR", 75);   // From 0.5% to 0.75% (within 0.5% gap)
-        updates[2] = DSPC.ParamChange("SSR", 100);  // From 0.75% to 1% (within 0.5% gap)
+        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
+        updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
+        updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
 
         vm.prank(alice);
         dspc.put(updates);
@@ -167,7 +166,7 @@ contract DSPCTest is Test {
 
     function test_RevertWhen_AboveCap() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 1100);  // 11%
+        updates[0] = DSPC.ParamChange(ILK, 1100); // 11%
 
         vm.prank(alice);
         vm.expectRevert("DSPC/above-hiCapBps");
@@ -176,7 +175,7 @@ contract DSPCTest is Test {
 
     function test_pop() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150);    // From 1% to 1.5% (within 1% gap)
+        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
 
         vm.prank(alice);
         dspc.put(updates);
@@ -184,15 +183,15 @@ contract DSPCTest is Test {
         vm.prank(alice);
         dspc.pop();
 
-        (DSPC.ParamChange[] memory storedUpdates, ) = dspc.batch();
+        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
         assertEq(storedUpdates.length, 0);
     }
 
     function test_zap() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 150);    // From 1% to 1.5% (within 1% gap)
-        updates[1] = DSPC.ParamChange("DSR", 75);   // From 0.5% to 0.75% (within 0.5% gap)
-        updates[2] = DSPC.ParamChange("SSR", 100);  // From 0.75% to 1% (within 0.5% gap)
+        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
+        updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
+        updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
 
         vm.prank(alice);
         dspc.put(updates);
@@ -210,7 +209,7 @@ contract DSPCTest is Test {
 
     function test_RevertWhen_ZapTooEarly() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150);  // From 1% to 1.5% (within 1% gap)
+        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
 
         vm.prank(alice);
         dspc.put(updates);
@@ -235,9 +234,9 @@ contract DSPCTest is Test {
     function test_file_clears_pending_updates() public {
         // First put some updates
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 150);    // From 1% to 1.5% (within 1% gap)
-        updates[1] = DSPC.ParamChange("DSR", 75);   // From 0.5% to 0.75% (within 0.5% gap)
-        updates[2] = DSPC.ParamChange("SSR", 100);  // From 0.75% to 1% (within 0.5% gap)
+        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
+        updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
+        updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
 
         vm.prank(alice);
         dspc.put(updates);
@@ -254,8 +253,8 @@ contract DSPCTest is Test {
         emit File(ILK, "gapBps", 200);
 
         // Change a config parameter (as admin)
-        vm.prank(address(this));  // Test contract is admin
-        dspc.file(ILK, "gapBps", 200);  // Change gap from 1% to 2%
+        vm.prank(address(this)); // Test contract is admin
+        dspc.file(ILK, "gapBps", 200); // Change gap from 1% to 2%
 
         // Verify updates were cleared
         (storedUpdates, eta) = dspc.batch();
@@ -264,7 +263,7 @@ contract DSPCTest is Test {
 
         // Verify we can put new updates after config change
         updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 200);    // Now allowed with new 2% gap
+        updates[0] = DSPC.ParamChange(ILK, 200); // Now allowed with new 2% gap
 
         vm.prank(alice);
         dspc.put(updates);

@@ -13,8 +13,8 @@ interface DSPCLike {
 /// @notice A contract that can halt the DSPC module in case of emergency
 contract DSPCMom {
     // --- Auth ---
-    address public owner;      // Owner address
-    address public authority;  // Authorization contract
+    address public owner; // Owner address
+    address public authority; // Authorization contract
 
     // --- Events ---
     event SetOwner(address indexed owner);
@@ -22,12 +22,12 @@ contract DSPCMom {
     event Halt(address indexed dspc);
 
     // --- Modifiers ---
-    modifier onlyOwner {
+    modifier onlyOwner() {
         require(msg.sender == owner, "DSPCMom/not-owner");
         _;
     }
 
-    modifier auth {
+    modifier auth() {
         require(isAuthorized(msg.sender, msg.sig), "DSPCMom/not-authorized");
         _;
     }

@@ -7,6 +7,7 @@ import "./Rates.sol";
 
 contract MockJug {
     function file(bytes32, bytes32, uint256) external {}
+
     function ilks(bytes32) external pure returns (uint256, uint256) {
         return (0, 0);
     }
@@ -14,6 +15,7 @@ contract MockJug {
 
 contract MockPot {
     function file(bytes32, uint256) external {}
+
     function dsr() external pure returns (uint256) {
         return 0;
     }
@@ -21,6 +23,7 @@ contract MockPot {
 
 contract MockSusds {
     function file(bytes32, uint256) external {}
+
     function ssr() external pure returns (uint256) {
         return 0;
     }
@@ -33,12 +36,7 @@ contract MockConv {
 }
 
 contract DSPCHarness is DSPC {
-    constructor(
-        address _jug,
-        address _pot,
-        address _susds,
-        address _conv
-    ) DSPC(_jug, _pot, _susds, _conv) {}
+    constructor(address _jug, address _pot, address _susds, address _conv) DSPC(_jug, _pot, _susds, _conv) {}
 
     function exposed_back(uint256 ray) public pure returns (uint256) {
         return _back(ray);
@@ -58,12 +56,7 @@ contract RayToBpsTest is Test, Rates {
         susds = new MockSusds();
         conv = new MockConv();
 
-        dspc = new DSPCHarness(
-            address(jug),
-            address(pot),
-            address(susds),
-            address(conv)
-        );
+        dspc = new DSPCHarness(address(jug), address(pot), address(susds), address(conv));
     }
 
     function test_back() public {
@@ -171,27 +164,10 @@ contract RayToBpsTest is Test, Rates {
         for (uint256 i = 0; i < validKeys.length; i++) {
             uint256 key = validKeys[i];
             uint256 rate = rates[key];
-            require(
-                rate > 0,
-                string(
-                    abi.encodePacked(
-                        "Rate not found for key: ",
-                        vm.toString(key)
-                    )
-                )
-            );
+            require(rate > 0, string(abi.encodePacked("Rate not found for key: ", vm.toString(key))));
 
             uint256 bps = dspc.exposed_back(rate);
-            assertEq(
-                bps,
-                key,
-                string(
-                    abi.encodePacked(
-                        "Incorrect BPS conversion for rate index: ",
-                        vm.toString(key)
-                    )
-                )
-            );
+            assertEq(bps, key, string(abi.encodePacked("Incorrect BPS conversion for rate index: ", vm.toString(key))));
         }
     }
 }

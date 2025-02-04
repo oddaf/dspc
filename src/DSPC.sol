@@ -29,33 +29,33 @@ contract DSPC {
     uint256 internal constant BASIS_POINTS = 10000;
 
     // --- Auth ---
-    mapping(address => uint256) public wards;  // Admins
-    mapping(address => uint256) public buds;   // Facilitators
-    uint256 public bad;                        // Circuit breaker
+    mapping(address => uint256) public wards; // Admins
+    mapping(address => uint256) public buds; // Facilitators
+    uint256 public bad; // Circuit breaker
 
     // --- Data ---
     struct Cfg {
-        uint16 loCapBps;  // Minimum rate in basis points
-        uint16 hiCapBps;  // Maximum rate in basis points
-        uint16 gapBps;    // Maximum rate change in basis points
+        uint16 loCapBps; // Minimum rate in basis points
+        uint16 hiCapBps; // Maximum rate in basis points
+        uint16 gapBps; // Maximum rate change in basis points
     }
 
     struct ParamChange {
-        bytes32 id;       // Identifier (ilk or "DSR" or "SSR")
-        uint256 bps;      // New rate in basis points
+        bytes32 id; // Identifier (ilk or "DSR" or "SSR")
+        uint256 bps; // New rate in basis points
     }
 
-    JugLike  public immutable jug;        // Stability fee rates
-    PotLike  public immutable pot;        // DSR rate
-    SUSDSLike public immutable susds;     // SSR rate
-    ConvLike public immutable conv;       // Rate conversion utility
+    JugLike public immutable jug; // Stability fee rates
+    PotLike public immutable pot; // DSR rate
+    SUSDSLike public immutable susds; // SSR rate
+    ConvLike public immutable conv; // Rate conversion utility
 
-    uint256 public lag;                   // Timelock duration
+    uint256 public lag; // Timelock duration
     mapping(bytes32 => Cfg) private _cfgs; // Constraints per rate
 
     // Pending rate updates
     ParamChange[] private _batch;
-    uint256 public eta;                   // Timestamp when the current batch can be executed
+    uint256 public eta; // Timestamp when the current batch can be executed
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -70,28 +70,23 @@ contract DSPC {
     event Halt();
 
     // --- Modifiers ---
-    modifier auth {
+    modifier auth() {
         require(wards[msg.sender] == 1, "DSPC/not-authorized");
         _;
     }
 
-    modifier toll {
+    modifier toll() {
         require(buds[msg.sender] == 1, "DSPC/not-facilitator");
         _;
     }
 
-    modifier good {
+    modifier good() {
         require(bad == 0, "DSPC/module-halted");
         _;
     }
 
     /// @notice Constructor sets the core contracts
-    constructor(
-        address _jug,
-        address _pot,
-        address _susds,
-        address _conv
-    ) {
+    constructor(address _jug, address _pot, address _susds, address _conv) {
         jug = JugLike(_jug);
         pot = PotLike(_pot);
         susds = SUSDSLike(_susds);
@@ -222,21 +217,28 @@ contract DSPC {
 
     function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
         assembly {
-            switch x case 0 {switch n case 0 {z := RAY} default {z := 0}}
+            switch x
+            case 0 {
+                switch n
+                case 0 { z := RAY }
+                default { z := 0 }
+            }
             default {
-                switch mod(n, 2) case 0 { z := RAY } default { z := x }
-                let half := div(RAY, 2)  // for rounding.
-                for { n := div(n, 2) } n { n := div(n,2) } {
+                switch mod(n, 2)
+                case 0 { z := RAY }
+                default { z := x }
+                let half := div(RAY, 2) // for rounding.
+                for { n := div(n, 2) } n { n := div(n, 2) } {
                     let xx := mul(x, x)
-                    if iszero(eq(div(xx, x), x)) { revert(0,0) }
+                    if iszero(eq(div(xx, x), x)) { revert(0, 0) }
                     let xxRound := add(xx, half)
-                    if lt(xxRound, xx) { revert(0,0) }
+                    if lt(xxRound, xx) { revert(0, 0) }
                     x := div(xxRound, RAY)
-                    if mod(n,2) {
+                    if mod(n, 2) {
                         let zx := mul(z, x)
-                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0,0) }
+                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0, 0) }
                         let zxRound := add(zx, half)
-                        if lt(zxRound, zx) { revert(0,0) }
+                        if lt(zxRound, zx) { revert(0, 0) }
                         z := div(zxRound, RAY)
                     }
                 }
