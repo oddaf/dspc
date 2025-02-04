@@ -97,15 +97,15 @@ contract DSPCTest is Test, RatesMock {
 
         // Configure the module
         dspc.file("lag", 1 days);
-        dspc.file(ILK, "loCapBps", 1); // 0.01%
-        dspc.file(ILK, "hiCapBps", 1000); // 10%
-        dspc.file(ILK, "gapBps", 100); // 1%
-        dspc.file("DSR", "loCapBps", 1); // 0.01%
-        dspc.file("DSR", "hiCapBps", 800); // 8%
-        dspc.file("DSR", "gapBps", 50); // 0.5%
-        dspc.file("SSR", "loCapBps", 1); // 0.01%
-        dspc.file("SSR", "hiCapBps", 800); // 8%
-        dspc.file("SSR", "gapBps", 50); // 0.5%
+        dspc.file(ILK, "min", 1); // 0.01%
+        dspc.file(ILK, "max", 1000); // 10%
+        dspc.file(ILK, "step", 100); // 1%
+        dspc.file("DSR", "min", 1); // 0.01%
+        dspc.file("DSR", "max", 800); // 8%
+        dspc.file("DSR", "step", 50); // 0.5%
+        dspc.file("SSR", "min", 1); // 0.01%
+        dspc.file("SSR", "max", 800); // 8%
+        dspc.file("SSR", "step", 50); // 0.5%
 
         // Add alice as a facilitator
         dspc.kiss(alice);
@@ -139,9 +139,9 @@ contract DSPCTest is Test, RatesMock {
         dspc.file("lag", 2 days);
         assertEq(dspc.lag(), 2 days);
 
-        dspc.file(ILK, "loCapBps", 100);
+        dspc.file(ILK, "min", 100);
         DSPC.Cfg memory cfg = dspc.cfgs(ILK);
-        assertEq(cfg.loCapBps, 100);
+        assertEq(cfg.min, 100);
 
         vm.expectRevert("DSPC/not-authorized");
         vm.prank(alice);
@@ -179,7 +179,7 @@ contract DSPCTest is Test, RatesMock {
         assertEq(storedUpdates.length, 1);
 
         // File operation with params should clear the batch
-        dspc.file(ILK, "hiCapBps", 900);
+        dspc.file(ILK, "max", 900);
 
         // Verify batch was cleared
         (storedUpdates,) = dspc.batch();
@@ -214,7 +214,7 @@ contract DSPCTest is Test, RatesMock {
         updates[0] = DSPC.ParamChange(ILK, 1100); // 11%
 
         vm.prank(alice);
-        vm.expectRevert("DSPC/above-hiCapBps");
+        vm.expectRevert("DSPC/above-max");
         dspc.put(updates);
     }
 
@@ -295,11 +295,11 @@ contract DSPCTest is Test, RatesMock {
         vm.expectEmit(true, true, true, true);
         emit Pop(storedUpdates);
         vm.expectEmit(true, true, true, true);
-        emit File(ILK, "gapBps", 200);
+        emit File(ILK, "step", 200);
 
         // Change a config parameter (as admin)
         vm.prank(address(this)); // Test contract is admin
-        dspc.file(ILK, "gapBps", 200); // Change gap from 1% to 2%
+        dspc.file(ILK, "step", 200); // Change gap from 1% to 2%
 
         // Verify updates were cleared
         (storedUpdates, eta) = dspc.batch();

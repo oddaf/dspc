@@ -25,9 +25,9 @@ interface ConvLike {
 contract DSPC {
     // --- Structs ---
     struct Cfg {
-        uint16 loCapBps; // Minimum rate in basis points
-        uint16 hiCapBps; // Maximum rate in basis points
-        uint16 gapBps; // Maximum rate change in basis points
+        uint16 min;  // Minimum rate in basis points
+        uint16 max;  // Maximum rate in basis points
+        uint16 step; // Maximum rate change in basis points
     }
 
     struct ParamChange {
@@ -144,10 +144,16 @@ contract DSPC {
     /// @notice Configure constraints for a rate
     function file(bytes32 id, bytes32 what, uint256 data) external auth {
         require(data <= type(uint16).max, "DSPC/overflow");
-        if (what == "loCapBps") _cfgs[id].loCapBps = uint16(data);
-        else if (what == "hiCapBps") _cfgs[id].hiCapBps = uint16(data);
-        else if (what == "gapBps") _cfgs[id].gapBps = uint16(data);
-        else revert("DSPC/file-unrecognized-param");
+        if (what == "min") {
+            require(data > 0, "DSPC/invalid-min");
+            _cfgs[id].min = uint16(data);
+        } else if (what == "max") {
+            require(data > 0, "DSPC/invalid-max");
+            _cfgs[id].max = uint16(data);
+        } else if (what == "step") {
+            require(data > 0, "DSPC/invalid-step");
+            _cfgs[id].step = uint16(data);
+        } else revert("DSPC/file-unrecognized-param");
 
         // Clear any pending batch when configs change
         _pop();
@@ -179,8 +185,8 @@ contract DSPC {
             uint256 bps = updates[i].bps;
             Cfg memory cfg = _cfgs[id];
 
-            require(bps >= cfg.loCapBps, "DSPC/below-loCapBps");
-            require(bps <= cfg.hiCapBps, "DSPC/above-hiCapBps");
+            require(bps >= cfg.min, "DSPC/below-min");
+            require(bps <= cfg.max, "DSPC/above-max");
 
             // Check rate change is within allowed gap
             uint256 oldBps;
@@ -194,7 +200,7 @@ contract DSPC {
             }
 
             uint256 delta = bps > oldBps ? bps - oldBps : oldBps - bps;
-            require(delta <= cfg.gapBps, "DSPC/delta-above-gapBps");
+            require(delta <= cfg.step, "DSPC/delta-above-step");
         }
 
         // Store the batch
