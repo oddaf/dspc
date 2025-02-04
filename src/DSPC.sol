@@ -31,14 +31,14 @@ contract DSPC {
     }
 
     struct ParamChange {
-        bytes32 id; // Identifier (ilk or "DSR" or "SSR")
+        bytes32 id; // Identifier (ilk | "DSR" | "SSR")
         uint256 bps; // New rate in basis points
     }
 
     // --- Constants ---
     uint256 internal constant RAY = 10 ** 27;
     uint256 internal constant WAD = 10 ** 18;
-    uint256 internal constant BASIS_POINTS = 10000;
+    uint256 internal constant BASIS_POINTS = 100_00;
 
     // --- Immutables ---
     JugLike public immutable jug; // Stability fee rates
@@ -64,8 +64,7 @@ contract DSPC {
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
     event Put(ParamChange[] updates, uint256 eta);
     event Pop(ParamChange[] updates);
-    event Zap();
-    event Halt();
+    event Zap(ParamChange[] updates);
 
     // --- Modifiers ---
     modifier auth() {
@@ -129,13 +128,16 @@ contract DSPC {
         if (what == "lag") {
             require(data <= type(uint32).max, "DSPC/lag-overflow");
             lag = uint32(data);
-        }
-        else if (what == "bad") {
+        } else if (what == "bad") {
             require(data <= 1, "DSPC/invalid-bad-value");
             bad = uint8(data);
-            if (data == 1) emit Halt();
+        } else {
+            revert("DSPC/file-unrecognized-param");
         }
-        else revert("DSPC/file-unrecognized-param");
+
+        // Clear any pending batch when configs change
+        _pop();
+
         emit File(what, data);
     }
 
@@ -148,9 +150,7 @@ contract DSPC {
         else revert("DSPC/file-unrecognized-param");
 
         // Clear any pending batch when configs change
-        if (_batch.length > 0) {
-            _pop();
-        }
+        _pop();
 
         emit File(id, what, data);
     }
@@ -162,10 +162,11 @@ contract DSPC {
 
     /// @notice Internal function to cancel a pending batch
     function _pop() internal {
-        ParamChange[] memory updates = _batch;
-        delete _batch;
-        eta = 0;
-        emit Pop(updates);
+        if (_batch.length > 0) {
+            emit Pop(_batch);
+            delete _batch;
+            eta = 0;
+        }
     }
 
     /// @notice Schedule a batch of rate updates
@@ -250,10 +251,12 @@ contract DSPC {
         require(_batch.length > 0, "DSPC/no-pending-batch");
         require(block.timestamp >= eta, "DSPC/batch-not-ready");
 
+        ParamChange[] memory updates = _batch;
+
         // Execute all updates
-        for (uint256 i = 0; i < _batch.length; i++) {
-            bytes32 id = _batch[i].id;
-            uint256 ray = conv.turn(_batch[i].bps);
+        for (uint256 i = 0; i < updates.length; i++) {
+            bytes32 id = updates[i].id;
+            uint256 ray = conv.turn(updates[i].bps);
 
             if (id == "DSR") {
                 pot.file("dsr", ray);
@@ -266,7 +269,7 @@ contract DSPC {
 
         delete _batch;
         eta = 0;
-        emit Zap();
+        emit Zap(updates);
     }
 
     // --- Getters ---

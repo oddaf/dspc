@@ -67,8 +67,7 @@ contract DSPCTest is Test, RatesMock {
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
     event Put(DSPC.ParamChange[] updates, uint256 eta);
     event Pop(DSPC.ParamChange[] updates);
-    event Zap();
-    event Halt();
+    event Zap(DSPC.ParamChange[] updates);
 
     DSPCHarness dspc;
     MockJug jug;
@@ -147,6 +146,44 @@ contract DSPCTest is Test, RatesMock {
         vm.expectRevert("DSPC/not-authorized");
         vm.prank(alice);
         dspc.file("lag", 1 days);
+    }
+
+    function test_file_clears_pending_batch() public {
+        // Setup a pending batch
+        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
+        updates[0] = DSPC.ParamChange(ILK, 150);
+        vm.prank(alice);
+        dspc.put(updates);
+
+        // Verify batch exists
+        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
+        assertEq(storedUpdates.length, 1);
+
+        // File operation should clear the batch
+        dspc.file("lag", 2 days);
+
+        // Verify batch was cleared
+        (storedUpdates,) = dspc.batch();
+        assertEq(storedUpdates.length, 0);
+    }
+
+    function test_file_with_params_clears_pending_batch() public {
+        // Setup a pending batch
+        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
+        updates[0] = DSPC.ParamChange(ILK, 150);
+        vm.prank(alice);
+        dspc.put(updates);
+
+        // Verify batch exists
+        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
+        assertEq(storedUpdates.length, 1);
+
+        // File operation with params should clear the batch
+        dspc.file(ILK, "hiCapBps", 900);
+
+        // Verify batch was cleared
+        (storedUpdates,) = dspc.batch();
+        assertEq(storedUpdates.length, 0);
     }
 
     function test_put() public {
