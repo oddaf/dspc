@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
-contract Rates {
+contract RatesMock {
     mapping(uint256 => uint256) public rates;
 
     constructor() {
