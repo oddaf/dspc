@@ -52,14 +52,14 @@ DSPC dspc = new DSPC(
 dspc.file("lag", 1 days);
 
 // Configure constraints for a collateral type
-dspc.file("ETH-A", "loCapBps", 1);     // Min rate: 0.01%
-dspc.file("ETH-A", "hiCapBps", 1000);  // Max rate: 10%
-dspc.file("ETH-A", "gapBps", 100);     // Max change: 1%
+dspc.file("ETH-A", "min", 1);     // Min rate: 0.01%
+dspc.file("ETH-A", "max", 1000);  // Max rate: 10%
+dspc.file("ETH-A", "step", 100);  // Max change: 1%
 
 // Configure constraints for DSR
-dspc.file("DSR", "loCapBps", 1);    // Min rate: 0.01%
-dspc.file("DSR", "hiCapBps", 800);  // Max rate: 8%
-dspc.file("DSR", "gapBps", 50);     // Max change: 0.5%
+dspc.file("DSR", "min", 1);    // Min rate: 0.01%
+dspc.file("DSR", "max", 800);  // Max rate: 8%
+dspc.file("DSR", "step", 50);  // Max change: 0.5%
 ```
 
 3. Add facilitators who can propose and execute rate changes:
@@ -86,6 +86,7 @@ The module implements a robust security model:
 - Two-level access control (admins and facilitators)
 - Rate constraints to prevent extreme changes
 - Timelock for all rate modifications
+- Disabling without GSM delay via DSPCMom contract
 - Circuit breaker (halt) functionality
 - All actions emit events for transparency
 

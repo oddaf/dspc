@@ -318,7 +318,7 @@ contract DSPCTest is Test, RatesMock {
         assertEq(eta, block.timestamp + 1 days);
     }
 
-    function test_back() public {
+    function test_back() public view {
         uint256[] memory validKeys = new uint256[](450);
         uint256 idx;
 

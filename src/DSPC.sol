@@ -25,8 +25,8 @@ interface ConvLike {
 contract DSPC {
     // --- Structs ---
     struct Cfg {
-        uint16 min;  // Minimum rate in basis points
-        uint16 max;  // Maximum rate in basis points
+        uint16 min; // Minimum rate in basis points
+        uint16 max; // Maximum rate in basis points
         uint16 step; // Maximum rate change in basis points
     }
 
@@ -47,13 +47,20 @@ contract DSPC {
     ConvLike public immutable conv; // Rate conversion utility
 
     // --- Storage Variables ---
-    mapping(address => uint256) public wards; // Admins
-    mapping(address => uint256) public buds; // Facilitators
-    mapping(bytes32 => Cfg) private _cfgs; // Constraints per rate
-    ParamChange[] private _batch; // Pending rate updates
-    uint8 public bad; // Circuit breaker
-    uint32 public lag; // Timelock duration
-    uint64 public eta; // Timestamp when the current batch can be executed
+    /// @notice Mapping of admin addresses
+    mapping(address => uint256) public wards;
+    /// @notice Mapping of addresses that can operate this module
+    mapping(address => uint256) public buds;
+    /// @notice Mapping of rate constraints
+    mapping(bytes32 => Cfg) private _cfgs;
+    /// @notice Pending rate updates
+    ParamChange[] private _batch;
+    /// @notice Circuit breaker flag
+    uint8 public bad;
+    /// @notice Timelock duration
+    uint32 public lag;
+    /// @notice Timestamp when current batch can be executed
+    uint64 public eta;
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -94,15 +101,15 @@ contract DSPC {
     }
 
     // --- Administration ---
-    /// @notice Add an admin
-    /// @param usr The address to add as an admin
+    /// @notice Grant authorization to an address
+    /// @param usr The address to be authorized
     function rely(address usr) external auth {
         wards[usr] = 1;
         emit Rely(usr);
     }
 
-    /// @notice Remove an admin
-    /// @param usr The address to remove as an admin
+    /// @notice Revoke authorization from an address
+    /// @param usr The address to be deauthorized
     function deny(address usr) external auth {
         wards[usr] = 0;
         emit Deny(usr);
@@ -153,7 +160,9 @@ contract DSPC {
         } else if (what == "step") {
             require(data > 0, "DSPC/invalid-step");
             _cfgs[id].step = uint16(data);
-        } else revert("DSPC/file-unrecognized-param");
+        } else {
+            revert("DSPC/file-unrecognized-param");
+        }
 
         // Clear any pending batch when configs change
         _pop();
@@ -167,6 +176,7 @@ contract DSPC {
     }
 
     /// @notice Internal function to cancel a pending batch
+    /// @dev Clears the pending batch and resets the activation time
     function _pop() internal {
         if (_batch.length > 0) {
             emit Pop(_batch);
@@ -213,6 +223,9 @@ contract DSPC {
         emit Put(updates, eta);
     }
 
+    /// @notice Internal function to convert a per-second rate to basis points
+    /// @param ray The per-second rate to convert
+    /// @return bps The rate in basis points
     function _back(uint256 ray) internal pure returns (uint256 bps) {
         // Convert per-second rate to per-year rate using rpow
         uint256 yearlyRate = _rpow(ray, 365 days);
@@ -221,6 +234,10 @@ contract DSPC {
         return ((yearlyRate - RAY) * BASIS_POINTS + RAY / 2) / RAY;
     }
 
+    /// @notice Internal function to calculate the result of a rate raised to a power
+    /// @param x The base rate
+    /// @param n The exponent
+    /// @return z The result of x raised to the power of n
     function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
         assembly {
             switch x
