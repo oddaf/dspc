@@ -29,11 +29,14 @@ contract DSPCMomTest is Test {
 
         // Setup initial state
         dspc.rely(address(mom)); // Mom needs authority over DSPC
-        dspc.deny(address(this)); // Remove deployer authority
+        dspc.rely(address(this)); // Keep test contract authority for test setup
 
         // Transfer ownership to admin
-        vm.prank(address(this));
+        vm.startPrank(address(this));
         mom.setOwner(admin);
+        authority.rely(admin); // Give admin authority over AuthorityMock
+        authority.deny(address(this)); // Remove deployer authority from AuthorityMock
+        vm.stopPrank();
     }
 
     function test_constructor() public view {
@@ -98,5 +101,81 @@ contract DSPCMomTest is Test {
         vm.prank(admin);
         vm.expectRevert();
         mom.halt(address(0));
+    }
+
+    function test_RevertWhen_NotOwner() public {
+        vm.prank(bob);
+        vm.expectRevert("DSPCMom/not-owner");
+        mom.setOwner(alice);
+
+        vm.prank(bob);
+        vm.expectRevert("DSPCMom/not-owner");
+        mom.setAuthority(address(authority));
+    }
+
+    function test_events() public {
+        // Test SetOwner event
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit SetOwner(alice);
+        mom.setOwner(alice);
+
+        // Test SetAuthority event
+        vm.prank(alice); // Now alice is the owner
+        vm.expectEmit(true, true, true, true);
+        emit SetAuthority(address(authority));
+        mom.setAuthority(address(authority));
+
+        // Test Halt event
+        vm.prank(alice);
+        vm.expectEmit(true, true, true, true);
+        emit Halt(address(dspc));
+        mom.halt(address(dspc));
+    }
+
+    function test_isAuthorized_this() public {
+        // Test that the contract itself is authorized
+        vm.prank(address(mom));
+        mom.halt(address(dspc));
+        assertEq(dspc.bad(), 1);
+    }
+
+    function test_authority_disabled() public {
+        // Test that authorization fails when authority is address(0)
+        vm.prank(admin);
+        mom.setAuthority(address(0));
+
+        vm.prank(bob);
+        vm.expectRevert("DSPCMom/not-authorized");
+        mom.halt(address(dspc));
+    }
+
+    function test_authority_revoked() public {
+        // Set up authority and grant permission
+        vm.prank(admin);
+        mom.setAuthority(address(authority));
+
+        // Grant permission to bob through authority
+        vm.prank(admin);
+        authority.setCanCall(bob, address(mom), DSPCMom.halt.selector, true);
+
+        // Bob can halt
+        vm.prank(bob);
+        mom.halt(address(dspc));
+        assertEq(dspc.bad(), 1);
+
+        // Reset bad flag
+        dspc.rely(address(this));  // Give test contract authority
+        dspc.file("bad", 0);
+        dspc.deny(address(this));  // Remove test contract authority
+
+        // Revoke permission
+        vm.prank(admin);
+        authority.setCanCall(bob, address(mom), DSPCMom.halt.selector, false);
+
+        // Bob can no longer halt
+        vm.prank(bob);
+        vm.expectRevert("DSPCMom/not-authorized");
+        mom.halt(address(dspc));
     }
 }
