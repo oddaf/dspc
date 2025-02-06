@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {DSPC} from "./DSPC.sol";
+import {DSPC} from "../src/DSPC.sol";
 import {RatesMock} from "./mocks/RatesMock.sol";
 
 contract MockJug {

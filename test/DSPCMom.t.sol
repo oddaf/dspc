@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {DSPCMom} from "./DSPCMom.sol";
+import {DSPCMom} from "../src/DSPCMom.sol";
 import {AuthorityMock} from "./mocks/AuthorityMock.sol";
-import {DSPC} from "./DSPC.sol";
+import {DSPC} from "../src/DSPC.sol";
 
 contract DSPCMomTest is Test {
     // --- Events ---
