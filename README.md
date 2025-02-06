@@ -1,6 +1,6 @@
 # Direct Stability Parameters Change Module (DSPC)
 
-A module for MakerDAO that enables direct changes to stability parameters (duty, dsr, ssr) through a simple, secure interface with proper constraints and timelocks.
+A module for MakerDAO that enables direct changes to stability parameters (duty, dsr, ssr) through a simple, secure interface with proper constraints.
 
 ## Overview
 
@@ -11,14 +11,13 @@ The DSPC module provides a streamlined way to modify stability parameters in the
 
 ## Features
 
-- Batch updates for multiple rate changes
+- Immediate updates for multiple rate changes
 - Two-level access control:
   - Admins can configure the module
-  - Facilitators can propose and execute rate changes
+  - Facilitators can execute rate changes
 - Rate change constraints:
   - Min/max caps per rate
-  - Maximum change (gap) per update
-- Timelock for all rate changes
+  - Maximum change (step) per update
 - Event emission for all actions
 - Simple, auditable implementation
 
@@ -48,9 +47,6 @@ DSPC dspc = new DSPC(
 
 2. Configure the module parameters:
 ```solidity
-// Set timelock duration
-dspc.file("lag", 1 days);
-
 // Configure constraints for a collateral type
 dspc.file("ETH-A", "min", 1);     // Min rate: 0.01%
 dspc.file("ETH-A", "max", 1000);  // Max rate: 10%
@@ -67,17 +63,12 @@ dspc.file("DSR", "step", 50);  // Max change: 0.5%
 dspc.kiss(facilitatorAddress);
 ```
 
-4. Propose a batch of rate changes:
+4. Execute rate changes:
 ```solidity
 DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](2);
 updates[0] = DSPC.ParamChange("ETH-A", 150);  // Set ETH-A rate to 1.5%
 updates[1] = DSPC.ParamChange("DSR", 75);     // Set DSR to 0.75%
-dspc.put(updates);
-```
-
-5. After the timelock period, execute the changes:
-```solidity
-dspc.zap();
+dspc.set(updates);
 ```
 
 ## Security
@@ -85,7 +76,7 @@ dspc.zap();
 The module implements a robust security model:
 - Two-level access control (admins and facilitators)
 - Rate constraints to prevent extreme changes
-- Timelock for all rate modifications
+- Maximum step size for rate changes
 - Disabling without GSM delay via DSPCMom contract
 - Circuit breaker (halt) functionality
 - All actions emit events for transparency

@@ -18,6 +18,7 @@ interface SUSDSLike {
 
 interface ConvLike {
     function turn(uint256 bps) external pure returns (uint256 ray);
+    function back(uint256 ray) external pure returns (uint256 bps);
 }
 
 /// @title Direct Stability Parameters Change Module
@@ -53,14 +54,8 @@ contract DSPC {
     mapping(address => uint256) public buds;
     /// @notice Mapping of rate constraints
     mapping(bytes32 => Cfg) private _cfgs;
-    /// @notice Pending rate updates
-    ParamChange[] private _batch;
     /// @notice Circuit breaker flag
-    uint8 public bad;
-    /// @notice Timelock duration
-    uint32 public lag;
-    /// @notice Timestamp when current batch can be executed
-    uint64 public eta;
+    uint256 public bad;
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -69,9 +64,7 @@ contract DSPC {
     event Diss(address indexed usr);
     event File(bytes32 indexed what, uint256 data);
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
-    event Put(ParamChange[] updates, uint256 eta);
-    event Pop(ParamChange[] updates);
-    event Zap(ParamChange[] updates);
+    event Set(ParamChange[] updates);
 
     // --- Modifiers ---
     modifier auth() {
@@ -132,18 +125,12 @@ contract DSPC {
 
     /// @notice Configure module parameters
     function file(bytes32 what, uint256 data) external auth {
-        if (what == "lag") {
-            require(data <= type(uint32).max, "DSPC/lag-overflow");
-            lag = uint32(data);
-        } else if (what == "bad") {
+        if (what == "bad") {
             require(data <= 1, "DSPC/invalid-bad-value");
-            bad = uint8(data);
+            bad = data;
         } else {
             revert("DSPC/file-unrecognized-param");
         }
-
-        // Clear any pending batch when configs change
-        _pop();
 
         emit File(what, data);
     }
@@ -164,32 +151,14 @@ contract DSPC {
             revert("DSPC/file-unrecognized-param");
         }
 
-        // Clear any pending batch when configs change
-        _pop();
-
         emit File(id, what, data);
     }
 
-    /// @notice Cancel a pending batch
-    function pop() external toll good {
-        _pop();
-    }
-
-    /// @notice Internal function to cancel a pending batch
-    /// @dev Clears the pending batch and resets the activation time
-    function _pop() internal {
-        if (_batch.length > 0) {
-            emit Pop(_batch);
-            delete _batch;
-            eta = 0;
-        }
-    }
-
-    /// @notice Schedule a batch of rate updates
-    function put(ParamChange[] calldata updates) external toll good {
+    /// @notice Set and apply rate updates immediately
+    function set(ParamChange[] calldata updates) external toll good {
         require(updates.length > 0, "DSPC/empty-batch");
 
-        // Validate all updates in the batch
+        // Validate and execute all updates
         for (uint256 i = 0; i < updates.length; i++) {
             bytes32 id = updates[i].id;
             uint256 bps = updates[i].bps;
@@ -201,86 +170,20 @@ contract DSPC {
             // Check rate change is within allowed gap
             uint256 oldBps;
             if (id == "DSR") {
-                oldBps = _back(PotLike(pot).dsr());
+                oldBps = conv.back(PotLike(pot).dsr());
             } else if (id == "SSR") {
-                oldBps = _back(SUSDSLike(susds).ssr());
+                oldBps = conv.back(SUSDSLike(susds).ssr());
             } else {
                 (uint256 duty,) = JugLike(jug).ilks(id);
-                oldBps = _back(duty);
+                oldBps = conv.back(duty);
             }
 
+            // Calculate absolute difference between new and old rate, and ensure it doesn't exceed maximum allowed change
             uint256 delta = bps > oldBps ? bps - oldBps : oldBps - bps;
             require(delta <= cfg.step, "DSPC/delta-above-step");
-        }
 
-        // Store the batch
-        delete _batch;
-        for (uint256 i = 0; i < updates.length; i++) {
-            _batch.push(updates[i]);
-        }
-        eta = uint64(block.timestamp + lag);
-
-        emit Put(updates, eta);
-    }
-
-    /// @notice Internal function to convert a per-second rate to basis points
-    /// @param ray The per-second rate to convert
-    /// @return bps The rate in basis points
-    function _back(uint256 ray) internal pure returns (uint256 bps) {
-        // Convert per-second rate to per-year rate using rpow
-        uint256 yearlyRate = _rpow(ray, 365 days);
-        // Subtract RAY to get the yearly rate delta and convert to basis points
-        // Add RAY/2 for rounding: ensures values are rounded up when >= 0.5 and down when < 0.5
-        return ((yearlyRate - RAY) * BASIS_POINTS + RAY / 2) / RAY;
-    }
-
-    /// @notice Internal function to calculate the result of a rate raised to a power
-    /// @param x The base rate
-    /// @param n The exponent
-    /// @return z The result of x raised to the power of n
-    function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
-        assembly {
-            switch x
-            case 0 {
-                switch n
-                case 0 { z := RAY }
-                default { z := 0 }
-            }
-            default {
-                switch mod(n, 2)
-                case 0 { z := RAY }
-                default { z := x }
-                let half := div(RAY, 2) // for rounding.
-                for { n := div(n, 2) } n { n := div(n, 2) } {
-                    let xx := mul(x, x)
-                    if iszero(eq(div(xx, x), x)) { revert(0, 0) }
-                    let xxRound := add(xx, half)
-                    if lt(xxRound, xx) { revert(0, 0) }
-                    x := div(xxRound, RAY)
-                    if mod(n, 2) {
-                        let zx := mul(z, x)
-                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0, 0) }
-                        let zxRound := add(zx, half)
-                        if lt(zxRound, zx) { revert(0, 0) }
-                        z := div(zxRound, RAY)
-                    }
-                }
-            }
-        }
-    }
-
-    /// @notice Execute a pending batch
-    function zap() external good {
-        require(_batch.length > 0, "DSPC/no-pending-batch");
-        require(block.timestamp >= eta, "DSPC/batch-not-ready");
-
-        ParamChange[] memory updates = _batch;
-
-        // Execute all updates
-        for (uint256 i = 0; i < updates.length; i++) {
-            bytes32 id = updates[i].id;
-            uint256 ray = conv.turn(updates[i].bps);
-
+            // Apply the update immediately
+            uint256 ray = conv.turn(bps);
             if (id == "DSR") {
                 pot.file("dsr", ray);
             } else if (id == "SSR") {
@@ -290,9 +193,7 @@ contract DSPC {
             }
         }
 
-        delete _batch;
-        eta = 0;
-        emit Zap(updates);
+        emit Set(updates);
     }
 
     // --- Getters ---
@@ -301,12 +202,5 @@ contract DSPC {
     /// @return The configuration struct
     function cfgs(bytes32 id) external view returns (Cfg memory) {
         return _cfgs[id];
-    }
-
-    /// @notice Get current pending batch
-    /// @return batch The array of pending rate updates
-    /// @return eta The timestamp when the batch becomes executable
-    function batch() external view returns (ParamChange[] memory, uint256) {
-        return (_batch, eta);
     }
 }

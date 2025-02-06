@@ -38,6 +38,7 @@ contract MockSUSDS {
 
 contract MockConv {
     uint256 constant RAY = 1e27;
+    uint256 constant BASIS_POINTS = 100_00;
     RatesMock public rates;
 
     constructor() {
@@ -48,13 +49,44 @@ contract MockConv {
         // Get the pre-computed rate from Rates contract
         return rates.rates(bps);
     }
-}
 
-contract DSPCHarness is DSPC {
-    constructor(address _jug, address _pot, address _susds, address _conv) DSPC(_jug, _pot, _susds, _conv) {}
+    function back(uint256 ray) external pure returns (uint256 bps) {
+        // Convert per-second rate to per-year rate using rpow
+        uint256 yearlyRate = _rpow(ray, 365 days);
+        // Subtract RAY to get the yearly rate delta and convert to basis points
+        // Add RAY/2 for rounding: ensures values are rounded up when >= 0.5 and down when < 0.5
+        return ((yearlyRate - RAY) * BASIS_POINTS + RAY / 2) / RAY;
+    }
 
-    function exposed_back(uint256 ray) public pure returns (uint256) {
-        return _back(ray);
+    function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
+        assembly {
+            switch x
+            case 0 {
+                switch n
+                case 0 { z := RAY }
+                default { z := 0 }
+            }
+            default {
+                switch mod(n, 2)
+                case 0 { z := RAY }
+                default { z := x }
+                let half := div(RAY, 2) // for rounding.
+                for { n := div(n, 2) } n { n := div(n, 2) } {
+                    let xx := mul(x, x)
+                    if iszero(eq(div(xx, x), x)) { revert(0, 0) }
+                    let xxRound := add(xx, half)
+                    if lt(xxRound, xx) { revert(0, 0) }
+                    x := div(xxRound, RAY)
+                    if mod(n, 2) {
+                        let zx := mul(z, x)
+                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0, 0) }
+                        let zxRound := add(zx, half)
+                        if lt(zxRound, zx) { revert(0, 0) }
+                        z := div(zxRound, RAY)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -65,11 +97,9 @@ contract DSPCTest is Test, RatesMock {
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
-    event Put(DSPC.ParamChange[] updates, uint256 eta);
-    event Pop(DSPC.ParamChange[] updates);
-    event Zap(DSPC.ParamChange[] updates);
+    event Set(DSPC.ParamChange[] updates);
 
-    DSPCHarness dspc;
+    DSPC dspc;
     MockJug jug;
     MockPot pot;
     MockSUSDS susds;
@@ -88,7 +118,7 @@ contract DSPCTest is Test, RatesMock {
         pot = new MockPot();
         susds = new MockSUSDS();
         conv = new MockConv();
-        dspc = new DSPCHarness(address(jug), address(pot), address(susds), address(conv));
+        dspc = new DSPC(address(jug), address(pot), address(susds), address(conv));
 
         // Initialize mock rates
         jug.file(ILK, "duty", conv.turn(100)); // 1%
@@ -96,7 +126,6 @@ contract DSPCTest is Test, RatesMock {
         susds.file("ssr", conv.turn(75)); // 0.75%
 
         // Configure the module
-        dspc.file("lag", 1 days);
         dspc.file(ILK, "min", 1); // 0.01%
         dspc.file(ILK, "max", 1000); // 10%
         dspc.file(ILK, "step", 100); // 1%
@@ -136,68 +165,28 @@ contract DSPCTest is Test, RatesMock {
     }
 
     function test_file() public {
-        dspc.file("lag", 2 days);
-        assertEq(dspc.lag(), 2 days);
-
         dspc.file(ILK, "min", 100);
         DSPC.Cfg memory cfg = dspc.cfgs(ILK);
         assertEq(cfg.min, 100);
 
         vm.expectRevert("DSPC/not-authorized");
         vm.prank(alice);
-        dspc.file("lag", 1 days);
+        dspc.file("bad", 1);
     }
 
-    function test_file_clears_pending_batch() public {
-        // Setup a pending batch
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150);
-        vm.prank(alice);
-        dspc.put(updates);
-
-        // Verify batch exists
-        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
-        assertEq(storedUpdates.length, 1);
-
-        // File operation should clear the batch
-        dspc.file("lag", 2 days);
-
-        // Verify batch was cleared
-        (storedUpdates,) = dspc.batch();
-        assertEq(storedUpdates.length, 0);
-    }
-
-    function test_file_with_params_clears_pending_batch() public {
-        // Setup a pending batch
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150);
-        vm.prank(alice);
-        dspc.put(updates);
-
-        // Verify batch exists
-        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
-        assertEq(storedUpdates.length, 1);
-
-        // File operation with params should clear the batch
-        dspc.file(ILK, "max", 900);
-
-        // Verify batch was cleared
-        (storedUpdates,) = dspc.batch();
-        assertEq(storedUpdates.length, 0);
-    }
-
-    function test_put() public {
+    function test_set() public {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
         updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
         updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
         updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
 
         vm.prank(alice);
-        dspc.put(updates);
+        dspc.set(updates);
 
-        (DSPC.ParamChange[] memory storedUpdates, uint256 eta) = dspc.batch();
-        assertEq(storedUpdates.length, 3);
-        assertEq(eta, block.timestamp + 1 days);
+        // Check rates were updated
+        assertEq(jug.duty(ILK), conv.turn(150));
+        assertEq(pot.dsr(), conv.turn(75));
+        assertEq(susds.ssr(), conv.turn(100));
     }
 
     function test_RevertWhen_NotFacilitator() public {
@@ -206,7 +195,7 @@ contract DSPCTest is Test, RatesMock {
 
         vm.prank(bob);
         vm.expectRevert("DSPC/not-facilitator");
-        dspc.put(updates);
+        dspc.set(updates);
     }
 
     function test_RevertWhen_AboveCap() public {
@@ -215,53 +204,7 @@ contract DSPCTest is Test, RatesMock {
 
         vm.prank(alice);
         vm.expectRevert("DSPC/above-max");
-        dspc.put(updates);
-    }
-
-    function test_pop() public {
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
-
-        vm.prank(alice);
-        dspc.put(updates);
-
-        vm.prank(alice);
-        dspc.pop();
-
-        (DSPC.ParamChange[] memory storedUpdates,) = dspc.batch();
-        assertEq(storedUpdates.length, 0);
-    }
-
-    function test_zap() public {
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
-        updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
-        updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
-
-        vm.prank(alice);
-        dspc.put(updates);
-
-        // Wait for the timelock
-        vm.warp(block.timestamp + 1 days);
-
-        dspc.zap();
-
-        // Check rates were updated
-        assertEq(jug.duty(ILK), conv.turn(150));
-        assertEq(pot.dsr(), conv.turn(75));
-        assertEq(susds.ssr(), conv.turn(100));
-    }
-
-    function test_RevertWhen_ZapTooEarly() public {
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
-
-        vm.prank(alice);
-        dspc.put(updates);
-
-        // Try to zap before timelock expires
-        vm.expectRevert("DSPC/batch-not-ready");
-        dspc.zap();
+        dspc.set(updates);
     }
 
     function test_halt() public {
@@ -273,49 +216,16 @@ contract DSPCTest is Test, RatesMock {
 
         vm.expectRevert("DSPC/module-halted");
         vm.prank(alice);
-        dspc.put(updates);
+        dspc.set(updates);
     }
 
-    function test_file_clears_pending_updates() public {
-        // First put some updates
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 150); // From 1% to 1.5% (within 1% gap)
-        updates[1] = DSPC.ParamChange("DSR", 75); // From 0.5% to 0.75% (within 0.5% gap)
-        updates[2] = DSPC.ParamChange("SSR", 100); // From 0.75% to 1% (within 0.5% gap)
+    function test_RevertWhen_AboveStep() public {
+        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
+        updates[0] = DSPC.ParamChange(ILK, 250); // From 1% to 2.5% (above 1% step)
 
         vm.prank(alice);
-        dspc.put(updates);
-
-        // Verify updates are stored
-        (DSPC.ParamChange[] memory storedUpdates, uint256 eta) = dspc.batch();
-        assertEq(storedUpdates.length, 3);
-        assertEq(eta, block.timestamp + 1 days);
-
-        // Expect Pop and File events when config changes
-        vm.expectEmit(true, true, true, true);
-        emit Pop(storedUpdates);
-        vm.expectEmit(true, true, true, true);
-        emit File(ILK, "step", 200);
-
-        // Change a config parameter (as admin)
-        vm.prank(address(this)); // Test contract is admin
-        dspc.file(ILK, "step", 200); // Change gap from 1% to 2%
-
-        // Verify updates were cleared
-        (storedUpdates, eta) = dspc.batch();
-        assertEq(storedUpdates.length, 0);
-        assertEq(eta, 0);
-
-        // Verify we can put new updates after config change
-        updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 200); // Now allowed with new 2% gap
-
-        vm.prank(alice);
-        dspc.put(updates);
-
-        (storedUpdates, eta) = dspc.batch();
-        assertEq(storedUpdates.length, 1);
-        assertEq(eta, block.timestamp + 1 days);
+        vm.expectRevert("DSPC/delta-above-step");
+        dspc.set(updates);
     }
 
     function test_back() public view {
@@ -425,7 +335,7 @@ contract DSPCTest is Test, RatesMock {
             uint256 rate = rates[key];
             require(rate > 0, string(abi.encodePacked("Rate not found for key: ", vm.toString(key))));
 
-            uint256 bps = dspc.exposed_back(rate);
+            uint256 bps = conv.back(rate);
             assertEq(bps, key, string(abi.encodePacked("Incorrect BPS conversion for rate index: ", vm.toString(key))));
         }
     }
