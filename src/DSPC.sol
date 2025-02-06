@@ -18,6 +18,7 @@ interface SUSDSLike {
 
 interface ConvLike {
     function turn(uint256 bps) external pure returns (uint256 ray);
+    function back(uint256 ray) external pure returns (uint256 bps);
 }
 
 /// @title Direct Stability Parameters Change Module
@@ -34,11 +35,6 @@ contract DSPC {
         bytes32 id; // Identifier (ilk | "DSR" | "SSR")
         uint256 bps; // New rate in basis points
     }
-
-    // --- Constants ---
-    uint256 internal constant RAY = 10 ** 27;
-    uint256 internal constant WAD = 10 ** 18;
-    uint256 internal constant BASIS_POINTS = 100_00;
 
     // --- Immutables ---
     JugLike public immutable jug; // Stability fee rates
@@ -201,12 +197,12 @@ contract DSPC {
             // Check rate change is within allowed gap
             uint256 oldBps;
             if (id == "DSR") {
-                oldBps = _back(PotLike(pot).dsr());
+                oldBps = conv.back(PotLike(pot).dsr());
             } else if (id == "SSR") {
-                oldBps = _back(SUSDSLike(susds).ssr());
+                oldBps = conv.back(SUSDSLike(susds).ssr());
             } else {
                 (uint256 duty,) = JugLike(jug).ilks(id);
-                oldBps = _back(duty);
+                oldBps = conv.back(duty);
             }
 
             uint256 delta = bps > oldBps ? bps - oldBps : oldBps - bps;
@@ -221,52 +217,6 @@ contract DSPC {
         eta = uint64(block.timestamp + lag);
 
         emit Put(updates, eta);
-    }
-
-    /// @notice Internal function to convert a per-second rate to basis points
-    /// @param ray The per-second rate to convert
-    /// @return bps The rate in basis points
-    function _back(uint256 ray) internal pure returns (uint256 bps) {
-        // Convert per-second rate to per-year rate using rpow
-        uint256 yearlyRate = _rpow(ray, 365 days);
-        // Subtract RAY to get the yearly rate delta and convert to basis points
-        // Add RAY/2 for rounding: ensures values are rounded up when >= 0.5 and down when < 0.5
-        return ((yearlyRate - RAY) * BASIS_POINTS + RAY / 2) / RAY;
-    }
-
-    /// @notice Internal function to calculate the result of a rate raised to a power
-    /// @param x The base rate
-    /// @param n The exponent
-    /// @return z The result of x raised to the power of n
-    function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
-        assembly {
-            switch x
-            case 0 {
-                switch n
-                case 0 { z := RAY }
-                default { z := 0 }
-            }
-            default {
-                switch mod(n, 2)
-                case 0 { z := RAY }
-                default { z := x }
-                let half := div(RAY, 2) // for rounding.
-                for { n := div(n, 2) } n { n := div(n, 2) } {
-                    let xx := mul(x, x)
-                    if iszero(eq(div(xx, x), x)) { revert(0, 0) }
-                    let xxRound := add(xx, half)
-                    if lt(xxRound, xx) { revert(0, 0) }
-                    x := div(xxRound, RAY)
-                    if mod(n, 2) {
-                        let zx := mul(z, x)
-                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0, 0) }
-                        let zxRound := add(zx, half)
-                        if lt(zxRound, zx) { revert(0, 0) }
-                        z := div(zxRound, RAY)
-                    }
-                }
-            }
-        }
     }
 
     /// @notice Execute a pending batch

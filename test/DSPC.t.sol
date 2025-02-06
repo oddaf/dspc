@@ -37,7 +37,8 @@ contract MockSUSDS {
 }
 
 contract MockConv {
-    uint256 constant RAY = 1e27;
+    uint256 internal constant RAY = 10 ** 27;
+    uint256 internal constant BASIS_POINTS = 100_00;
     RatesMock public rates;
 
     constructor() {
@@ -48,13 +49,44 @@ contract MockConv {
         // Get the pre-computed rate from Rates contract
         return rates.rates(bps);
     }
-}
 
-contract DSPCHarness is DSPC {
-    constructor(address _jug, address _pot, address _susds, address _conv) DSPC(_jug, _pot, _susds, _conv) {}
+    function back(uint256 ray) external pure returns (uint256 bps) {
+        // Convert per-second rate to per-year rate using rpow
+        uint256 yearlyRate = _rpow(ray, 365 days);
+        // Subtract RAY to get the yearly rate delta and convert to basis points
+        // Add RAY/2 for rounding: ensures values are rounded up when >= 0.5 and down when < 0.5
+        return ((yearlyRate - RAY) * BASIS_POINTS + RAY / 2) / RAY;
+    }
 
-    function exposed_back(uint256 ray) public pure returns (uint256) {
-        return _back(ray);
+    function _rpow(uint256 x, uint256 n) internal pure returns (uint256 z) {
+        assembly {
+            switch x
+            case 0 {
+                switch n
+                case 0 { z := RAY }
+                default { z := 0 }
+            }
+            default {
+                switch mod(n, 2)
+                case 0 { z := RAY }
+                default { z := x }
+                let half := div(RAY, 2) // for rounding.
+                for { n := div(n, 2) } n { n := div(n, 2) } {
+                    let xx := mul(x, x)
+                    if iszero(eq(div(xx, x), x)) { revert(0, 0) }
+                    let xxRound := add(xx, half)
+                    if lt(xxRound, xx) { revert(0, 0) }
+                    x := div(xxRound, RAY)
+                    if mod(n, 2) {
+                        let zx := mul(z, x)
+                        if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0, 0) }
+                        let zxRound := add(zx, half)
+                        if lt(zxRound, zx) { revert(0, 0) }
+                        z := div(zxRound, RAY)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -69,7 +101,7 @@ contract DSPCTest is Test, RatesMock {
     event Pop(DSPC.ParamChange[] updates);
     event Zap(DSPC.ParamChange[] updates);
 
-    DSPCHarness dspc;
+    DSPC dspc;
     MockJug jug;
     MockPot pot;
     MockSUSDS susds;
@@ -88,7 +120,7 @@ contract DSPCTest is Test, RatesMock {
         pot = new MockPot();
         susds = new MockSUSDS();
         conv = new MockConv();
-        dspc = new DSPCHarness(address(jug), address(pot), address(susds), address(conv));
+        dspc = new DSPC(address(jug), address(pot), address(susds), address(conv));
 
         // Initialize mock rates
         jug.file(ILK, "duty", conv.turn(100)); // 1%
@@ -425,7 +457,7 @@ contract DSPCTest is Test, RatesMock {
             uint256 rate = rates[key];
             require(rate > 0, string(abi.encodePacked("Rate not found for key: ", vm.toString(key))));
 
-            uint256 bps = dspc.exposed_back(rate);
+            uint256 bps = conv.back(rate);
             assertEq(bps, key, string(abi.encodePacked("Incorrect BPS conversion for rate index: ", vm.toString(key))));
         }
     }
