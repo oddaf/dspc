@@ -156,7 +156,7 @@ contract DSPCTest is DssTest {
         dss.pot.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(DSR, target);  
+        updates[0] = DSPC.ParamChange(DSR, target);
 
         dspc.put(updates);
 
@@ -189,9 +189,9 @@ contract DSPCTest is DssTest {
         susds.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, ilkTarget);      
-        updates[1] = DSPC.ParamChange(DSR, dsrTarget);  
-        updates[2] = DSPC.ParamChange(SSR, ssrTarget);  
+        updates[0] = DSPC.ParamChange(ILK, ilkTarget);
+        updates[1] = DSPC.ParamChange(DSR, dsrTarget);
+        updates[2] = DSPC.ParamChange(SSR, ssrTarget);
 
         dspc.put(updates);
 

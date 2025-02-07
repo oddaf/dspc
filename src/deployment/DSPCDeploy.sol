@@ -18,12 +18,7 @@ struct DSPCDeployParams {
 
 library DSPCDeploy {
     function deploy(DSPCDeployParams memory params) internal returns (DSPCInstance memory inst) {
-        inst.dspc = new DSPC(
-            params.jug,
-            params.pot,
-            params.susds,
-            params.conv
-        );
+        inst.dspc = new DSPC(params.jug, params.pot, params.susds, params.conv);
 
         inst.mom = new DSPCMom();
 

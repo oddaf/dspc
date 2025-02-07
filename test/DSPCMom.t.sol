@@ -59,8 +59,8 @@ contract DSPCMomIntegrationTest is DssTest {
         DSPCInstance memory inst = DSPCDeploy.deploy(
             DSPCDeployParams({
                 deployer: address(this),
-                owner: address(this),  
-                authority:address(chief),
+                owner: address(this),
+                authority: address(chief),
                 jug: address(dss.jug),
                 pot: address(dss.pot),
                 susds: address(susds),

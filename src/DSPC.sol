@@ -137,7 +137,7 @@ contract DSPC {
         } else {
             revert("DSPC/file-unrecognized-param");
         }
-        
+
         emit File(what, data);
     }
 
