@@ -163,7 +163,6 @@ contract DSPC {
     /// @dev Emits File event after successful configuration
     function file(bytes32 id, bytes32 what, uint256 data) external auth {
         if (what == "min") {
-            require(data > 0, "DSPC/invalid-min");
             _cfgs[id].min = uint16(data);
         } else if (what == "max") {
             require(data > 0, "DSPC/invalid-max");
