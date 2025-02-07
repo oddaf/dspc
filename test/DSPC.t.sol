@@ -3,7 +3,10 @@ pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
 import {DSPC} from "../src/DSPC.sol";
+import {DSPCMom} from "../src/DSPCMom.sol";
 import {ConvMock} from "./mocks/ConvMock.sol";
+import {DSPCDeploy, DSPCDeployParams} from "../src/deployment/DSPCDeploy.sol";
+import {DSPCInstance} from "../src/deployment/DSPCInstance.sol";
 
 interface ConvLike {
     function turn(uint256 bps) external pure returns (uint256 ray);
@@ -21,6 +24,7 @@ contract DSPCTest is DssTest {
 
     DssInstance dss;
     DSPC dspc;
+    DSPCMom mom;
     ConvLike conv;
     SUSDSLike susds;
     address pause;
@@ -46,12 +50,19 @@ contract DSPCTest is DssTest {
 
         conv = ConvLike(address(new ConvMock()));
 
-        dspc = new DSPC(
-            address(dss.jug),
-            address(dss.pot),
-            address(susds),
-            address(conv)
+        DSPCInstance memory inst = DSPCDeploy.deploy(
+            DSPCDeployParams({
+                deployer: address(this),
+                owner: address(this),
+                authority: address(dss.chainlog.getAddress("MCD_ADM")),
+                jug: address(dss.jug),
+                pot: address(dss.pot),
+                susds: address(susds),
+                conv: address(conv)
+            })
         );
+        dspc = inst.dspc;
+        mom = inst.mom;
 
         vm.startPrank(pauseProxy);
         {
