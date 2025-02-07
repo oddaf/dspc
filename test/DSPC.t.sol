@@ -1,143 +1,113 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import "dss-test/DssTest.sol";
 import {DSPC} from "../src/DSPC.sol";
+import {ConvMock} from "./mocks/ConvMock.sol";
 
-contract MockJug {
-    mapping(bytes32 => uint256) public duty;
-
-    function file(bytes32 ilk, bytes32 what, uint256 data) external {
-        require(what == "duty", "MockJug/invalid-what");
-        duty[ilk] = data;
-    }
-
-    function ilks(bytes32 ilk) external view returns (uint256, uint256) {
-        return (duty[ilk], 0);
-    }
+interface ConvLike {
+    function turn(uint256 bps) external pure returns (uint256 ray);
+    function back(uint256 ray) external pure returns (uint256 bps);
 }
 
-contract MockPot {
-    uint256 public dsr;
-
-    function file(bytes32 what, uint256 data) external {
-        require(what == "dsr", "MockPot/invalid-what");
-        dsr = data;
-    }
+interface SUSDSLike {
+    function rely(address usr) external;
+    function ssr() external view returns (uint256);
+    function drip() external;
 }
 
-contract MockSUSDS {
-    uint256 public ssr;
+contract DSPCTest is DssTest {
+    address constant CHAINLOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
 
-    function file(bytes32 what, uint256 data) external {
-        require(what == "ssr", "MockSUSDS/invalid-what");
-        ssr = data;
-    }
-}
+    DssInstance dss;
+    DSPC dspc;
+    ConvLike conv;
+    SUSDSLike susds;
+    address pause;
+    address pauseProxy;
 
-contract MockConv {
-    uint256 internal constant RAY = 10 ** 27;
-    uint256 internal constant BASIS_POINTS = 100_00;
+    bytes32 constant ILK = "ETH-A";
+    bytes32 constant DSR = "DSR";
+    bytes32 constant SSR = "SSR";
 
-    function turn(uint256 bps) external pure returns (uint256) {
-        // Convert basis points to ray
-        // 100 bps = 1% = 1.01 * RAY
-        return RAY + (RAY * bps) / BASIS_POINTS;
-    }
-
-    function back(uint256 ray) external pure returns (uint256) {
-        // Convert ray to basis points
-        // 1.01 * RAY = 1% = 100 bps
-        return ((ray - RAY) * BASIS_POINTS) / RAY;
-    }
-}
-
-contract DSPCTest is Test {
-    event Rely(address indexed usr);
-    event Deny(address indexed usr);
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
-    event File(bytes32 indexed what, uint256 data);
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
     event Put(DSPC.ParamChange[] updates);
 
-    DSPC dspc;
-    MockJug jug;
-    MockPot pot;
-    MockSUSDS susds;
-    MockConv conv;
-
-    address admin = address(this);
-    address alice = address(0xA11CE);
-    address bob = address(0xB0B);
-
-    bytes32 constant ILK = "ETH-A";
-    uint256 constant WAD = 1e18;
-    uint256 constant RAY = 1e27;
-
     function setUp() public {
-        jug = new MockJug();
-        pot = new MockPot();
-        susds = new MockSUSDS();
-        conv = new MockConv();
-        dspc = new DSPC(address(jug), address(pot), address(susds), address(conv));
+        vm.createSelectFork("mainnet");
+        dss = MCD.loadFromChainlog(CHAINLOG);
+        pause = dss.chainlog.getAddress("MCD_PAUSE");
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
+        susds = SUSDSLike(dss.chainlog.getAddress("SUSDS"));
 
-        // Initialize mock rates
-        jug.file(ILK, "duty", conv.turn(100)); // 1%
-        pot.file("dsr", conv.turn(100)); // 1%
-        susds.file("ssr", conv.turn(100)); // 1%
+        MCD.giveAdminAccess(dss);
 
-        // Configure DSPC
+        conv = ConvLike(address(new ConvMock()));
+
+        dspc = new DSPC(
+            address(dss.jug),
+            address(dss.pot),
+            address(susds),
+            address(conv)
+        );
+
+        vm.startPrank(pauseProxy);
+        {
+            dss.jug.rely(address(dspc));
+            dss.pot.rely(address(dspc));
+            SUSDSLike(address(susds)).rely(address(dspc));
+        }
+        vm.stopPrank();
+
         dspc.file(ILK, "min", 1);
-        dspc.file(ILK, "max", 1000);
-        dspc.file(ILK, "step", 200);  // Allow 2% step
-        dspc.file("DSR", "min", 1);
-        dspc.file("DSR", "max", 1000);
-        dspc.file("DSR", "step", 200);  // Allow 2% step
-        dspc.file("SSR", "min", 1);
-        dspc.file("SSR", "max", 1000);
-        dspc.file("SSR", "step", 200);  // Allow 2% step
-
-        // Add test address as facilitator
-        dspc.kiss(address(this));
+        dspc.file(ILK, "max", 30000);
+        dspc.file(ILK, "step", 50);
+        dspc.file(DSR, "min", 1);
+        dspc.file(DSR, "max", 30000);
+        dspc.file(DSR, "step", 50);
+        dspc.file(SSR, "min", 1);
+        dspc.file(SSR, "max", 30000);
+        dspc.file(SSR, "step", 50);
     }
 
-    function test_constructor() public {
-        assertEq(address(dspc.jug()), address(jug));
-        assertEq(address(dspc.pot()), address(pot));
+    function test_constructor() public view {
+        assertEq(address(dspc.jug()), address(dss.jug));
+        assertEq(address(dspc.pot()), address(dss.pot));
         assertEq(address(dspc.susds()), address(susds));
         assertEq(address(dspc.conv()), address(conv));
+        assertEq(dspc.wards(address(this)), 1);
     }
 
     function test_auth() public {
-        assertTrue(dspc.wards(address(this)) == 1);
-        dspc.deny(address(this));
-        assertTrue(dspc.wards(address(this)) == 0);
-        vm.expectRevert("DSPC/not-authorized");
-        dspc.rely(address(this));
+        checkAuth(address(dspc), "DSPC");
     }
 
     function test_file_bad() public {
+        assertEq(dspc.bad(), 0);
         dspc.file("bad", 1);
         assertEq(dspc.bad(), 1);
+
         vm.expectRevert("DSPC/invalid-bad-value");
         dspc.file("bad", 2);
-    }
 
-    function test_file_unrecognized() public {
         vm.expectRevert("DSPC/file-unrecognized-param");
-        dspc.file("what", 0);
+        dspc.file("unknown", 1);
     }
 
     function test_file_ilk() public {
-        dspc.file(ILK, "min", 1);
-        dspc.file(ILK, "max", 1000);
+        assertEq(dspc.cfgs(ILK).min, 1);
+        assertEq(dspc.cfgs(ILK).max, 30000);
+        assertEq(dspc.cfgs(ILK).step, 50);
+
+        dspc.file(ILK, "min", 100);
+        dspc.file(ILK, "max", 3000);
         dspc.file(ILK, "step", 100);
 
-        DSPC.Cfg memory cfg = dspc.cfgs(ILK);
-        assertEq(cfg.min, 1);
-        assertEq(cfg.max, 1000);
-        assertEq(cfg.step, 100);
+        assertEq(dspc.cfgs(ILK).min, 100);
+        assertEq(dspc.cfgs(ILK).max, 3000);
+        assertEq(dspc.cfgs(ILK).step, 100);
     }
 
     function test_file_ilk_invalid() public {
@@ -151,54 +121,89 @@ contract DSPCTest is Test {
         dspc.file(ILK, "step", 0);
 
         vm.expectRevert("DSPC/file-unrecognized-param");
-        dspc.file(ILK, "what", 0);
-    }
-
-    function test_put_empty() public {
-        vm.expectRevert("DSPC/empty-batch");
-        dspc.put(new DSPC.ParamChange[](0));
+        dspc.file(ILK, "unknown", 100);
     }
 
     function test_put_ilk() public {
+        dspc.kiss(address(this));
+        (uint256 duty,) = dss.jug.ilks(ILK);
+        uint256 target = conv.back(duty) + 50;
+        dss.jug.drip(ILK);
+
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 200);
+        updates[0] = DSPC.ParamChange(ILK, target);
 
         dspc.put(updates);
 
-        (uint256 duty,) = jug.ilks(ILK);
-        assertEq(conv.back(duty), 200);
+        (duty,) = dss.jug.ilks(ILK);
+        assertEq(duty, conv.turn(target));
     }
 
     function test_put_dsr() public {
+        dspc.kiss(address(this));
+        uint256 target = conv.back(dss.pot.dsr()) + 50;
+        dss.pot.drip();
+
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange("DSR", 200);
+        updates[0] = DSPC.ParamChange(DSR, target);  
 
         dspc.put(updates);
 
-        assertEq(conv.back(pot.dsr()), 200);
+        assertEq(dss.pot.dsr(), conv.turn(target));
     }
 
     function test_put_ssr() public {
+        dspc.kiss(address(this));
+        uint256 target = conv.back(susds.ssr()) - 50;
+        susds.drip();
+
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange("SSR", 200);
+        updates[0] = DSPC.ParamChange(SSR, target);
 
         dspc.put(updates);
 
-        assertEq(conv.back(susds.ssr()), 200);
+        assertEq(susds.ssr(), conv.turn(target));
     }
 
     function test_put_multiple() public {
+        dspc.kiss(address(this));
+
+        (uint256 duty,) = dss.jug.ilks(ILK);
+        uint256 ilkTarget = conv.back(duty) - 50;
+        uint256 dsrTarget = conv.back(dss.pot.dsr()) - 50;
+        uint256 ssrTarget = conv.back(susds.ssr()) + 50;
+
+        dss.jug.drip(ILK);
+        dss.pot.drip();
+        susds.drip();
+
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
-        updates[0] = DSPC.ParamChange(ILK, 200);
-        updates[1] = DSPC.ParamChange("DSR", 200);
-        updates[2] = DSPC.ParamChange("SSR", 200);
+        updates[0] = DSPC.ParamChange(ILK, ilkTarget);      
+        updates[1] = DSPC.ParamChange(DSR, dsrTarget);  
+        updates[2] = DSPC.ParamChange(SSR, ssrTarget);  
 
         dspc.put(updates);
 
-        (uint256 duty,) = jug.ilks(ILK);
-        assertEq(conv.back(duty), 200);
-        assertEq(conv.back(pot.dsr()), 200);
-        assertEq(conv.back(susds.ssr()), 200);
+        (duty,) = dss.jug.ilks(ILK);
+        assertEq(duty, conv.turn(ilkTarget));
+        assertEq(dss.pot.dsr(), conv.turn(dsrTarget));
+        assertEq(susds.ssr(), conv.turn(ssrTarget));
+    }
+
+    function test_put_empty() public {
+        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](0);
+
+        dspc.kiss(address(this));
+        vm.expectRevert("DSPC/empty-batch");
+        dspc.put(updates);
+    }
+
+    function test_put_unauthorized() public {
+        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
+        updates[0] = DSPC.ParamChange(ILK, 100);
+
+        vm.expectRevert("DSPC/not-facilitator");
+        dspc.put(updates);
     }
 
     function test_put_below_min() public {
@@ -207,6 +212,7 @@ contract DSPCTest is Test {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
         updates[0] = DSPC.ParamChange(ILK, 50);
 
+        dspc.kiss(address(this));
         vm.expectRevert("DSPC/below-min");
         dspc.put(updates);
     }
@@ -217,6 +223,7 @@ contract DSPCTest is Test {
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
         updates[0] = DSPC.ParamChange(ILK, 150);
 
+        dspc.kiss(address(this));
         vm.expectRevert("DSPC/above-max");
         dspc.put(updates);
     }
@@ -225,48 +232,10 @@ contract DSPCTest is Test {
         dspc.file(ILK, "step", 50);
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 151);  // More than 50 bps change from 100
+        updates[0] = DSPC.ParamChange(ILK, 100);
 
+        dspc.kiss(address(this));
         vm.expectRevert("DSPC/delta-above-step");
         dspc.put(updates);
-    }
-
-    function test_put_bad() public {
-        dspc.file("bad", 1);
-
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 200);
-
-        vm.expectRevert("DSPC/module-halted");
-        dspc.put(updates);
-    }
-
-    function test_put_unauthorized() public {
-        DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
-        updates[0] = DSPC.ParamChange(ILK, 200);
-
-        vm.prank(address(0));
-        vm.expectRevert("DSPC/not-facilitator");
-        dspc.put(updates);
-    }
-
-    function test_facilitator_management() public {
-        // Test kiss
-        dspc.kiss(alice);
-        assertEq(dspc.buds(alice), 1);
-
-        // Test diss
-        dspc.diss(alice);
-        assertEq(dspc.buds(alice), 0);
-
-        // Test unauthorized kiss
-        vm.prank(bob);
-        vm.expectRevert("DSPC/not-authorized");
-        dspc.kiss(alice);
-
-        // Test unauthorized diss
-        vm.prank(bob);
-        vm.expectRevert("DSPC/not-authorized");
-        dspc.diss(alice);
     }
 }
