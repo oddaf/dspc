@@ -10,13 +10,13 @@ Configuration for deploying DSPC and DSPCMom contracts:
 
 ## Usage
 
-1. Update `dspc-deploy.json` with the correct `conv` address
-2. Run the deployment script:
+1. Copy `template-dspc-deploy.json` into a new file (i.e.: `dspc-deploy.json`)
+2. Edit the new file with the correct `conv` address
+3. Run the deployment script:
 ```bash
-forge script script/DSPCDeploy.s.sol:DSPCDeployScript \
+FOUNDRY_SCRIPT_CONFIG=dspc-deploy forge script script/DSPCDeploy.s.sol:DSPCDeployScript \
     --rpc-url $ETH_RPC_URL \
     --broadcast
-```
 
 The deployment script will:
 1. Load system addresses from chainlog (jug, pot, susds)
