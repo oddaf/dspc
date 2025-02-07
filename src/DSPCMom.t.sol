@@ -17,11 +17,11 @@
 pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
-import {DSPC} from "../src/DSPC.sol";
-import {DSPCMom} from "../src/DSPCMom.sol";
+import {DSPC} from "./DSPC.sol";
+import {DSPCMom} from "./DSPCMom.sol";
 import {ConvMock} from "./mocks/ConvMock.sol";
-import {DSPCDeploy, DSPCDeployParams} from "../src/deployment/DSPCDeploy.sol";
-import {DSPCInstance} from "../src/deployment/DSPCInstance.sol";
+import {DSPCDeploy, DSPCDeployParams} from "./deployment/DSPCDeploy.sol";
+import {DSPCInstance} from "./deployment/DSPCInstance.sol";
 
 interface ChiefLike {
     function hat() external view returns (address);
