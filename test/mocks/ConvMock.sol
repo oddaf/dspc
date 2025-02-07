@@ -34,7 +34,7 @@ contract ConvMock {
     /// @notice Fetches the rate for a given basis points value
     /// @param bps The basis points value to get the rate for
     /// @return ray The annual rate value
-    function turn(uint256 bps) public view returns (uint256 ray) {
+    function btor(uint256 bps) public view returns (uint256 ray) {
         require(bps <= MAX);
 
         assembly {
@@ -55,7 +55,7 @@ contract ConvMock {
     /// @notice Fetches the yearly bps rate for a given per second rate
     /// @param ray The per second rate to get the rate for
     /// @return bps The annual rate value
-    function back(uint256 ray) public pure returns (uint256 bps) {
+    function rtob(uint256 ray) public pure returns (uint256 bps) {
         // Convert per-second rate to per-year rate using rpow
         uint256 yearlyRate = _rpow(ray, 365 days);
         // Subtract RAY to get the yearly rate delta and convert to basis points

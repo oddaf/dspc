@@ -32,8 +32,8 @@ interface SUSDSLike {
 }
 
 interface ConvLike {
-    function turn(uint256 bps) external pure returns (uint256 ray);
-    function back(uint256 ray) external pure returns (uint256 bps);
+    function btor(uint256 bps) external pure returns (uint256 ray);
+    function rtob(uint256 ray) external pure returns (uint256 bps);
 }
 
 /// @title Direct Stability Parameters Change Module
@@ -202,19 +202,19 @@ contract DSPC {
             // Check rate change is within allowed gap
             uint256 oldBps;
             if (id == "DSR") {
-                oldBps = conv.back(PotLike(pot).dsr());
+                oldBps = conv.rtob(PotLike(pot).dsr());
             } else if (id == "SSR") {
-                oldBps = conv.back(SUSDSLike(susds).ssr());
+                oldBps = conv.rtob(SUSDSLike(susds).ssr());
             } else {
                 (uint256 duty,) = JugLike(jug).ilks(id);
-                oldBps = conv.back(duty);
+                oldBps = conv.rtob(duty);
             }
 
             uint256 delta = bps > oldBps ? bps - oldBps : oldBps - bps;
             require(delta <= cfg.step, "DSPC/delta-above-step");
 
             // Execute the update
-            uint256 ray = conv.turn(bps);
+            uint256 ray = conv.btor(bps);
             if (id == "DSR") {
                 pot.file("dsr", ray);
             } else if (id == "SSR") {

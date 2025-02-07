@@ -23,8 +23,8 @@ import {DSPCDeploy, DSPCDeployParams} from "../src/deployment/DSPCDeploy.sol";
 import {DSPCInstance} from "../src/deployment/DSPCInstance.sol";
 
 interface ConvLike {
-    function turn(uint256 bps) external pure returns (uint256 ray);
-    function back(uint256 ray) external pure returns (uint256 bps);
+    function btor(uint256 bps) external pure returns (uint256 ray);
+    function rtob(uint256 ray) external pure returns (uint256 bps);
 }
 
 interface SUSDSLike {
@@ -152,7 +152,7 @@ contract DSPCTest is DssTest {
     function test_put_ilk() public {
         dspc.kiss(address(this));
         (uint256 duty,) = dss.jug.ilks(ILK);
-        uint256 target = conv.back(duty) + 50;
+        uint256 target = conv.rtob(duty) + 50;
         dss.jug.drip(ILK);
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
@@ -161,12 +161,12 @@ contract DSPCTest is DssTest {
         dspc.put(updates);
 
         (duty,) = dss.jug.ilks(ILK);
-        assertEq(duty, conv.turn(target));
+        assertEq(duty, conv.btor(target));
     }
 
     function test_put_dsr() public {
         dspc.kiss(address(this));
-        uint256 target = conv.back(dss.pot.dsr()) + 50;
+        uint256 target = conv.rtob(dss.pot.dsr()) + 50;
         dss.pot.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
@@ -174,12 +174,12 @@ contract DSPCTest is DssTest {
 
         dspc.put(updates);
 
-        assertEq(dss.pot.dsr(), conv.turn(target));
+        assertEq(dss.pot.dsr(), conv.btor(target));
     }
 
     function test_put_ssr() public {
         dspc.kiss(address(this));
-        uint256 target = conv.back(susds.ssr()) - 50;
+        uint256 target = conv.rtob(susds.ssr()) - 50;
         susds.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
@@ -187,16 +187,16 @@ contract DSPCTest is DssTest {
 
         dspc.put(updates);
 
-        assertEq(susds.ssr(), conv.turn(target));
+        assertEq(susds.ssr(), conv.btor(target));
     }
 
     function test_put_multiple() public {
         dspc.kiss(address(this));
 
         (uint256 duty,) = dss.jug.ilks(ILK);
-        uint256 ilkTarget = conv.back(duty) - 50;
-        uint256 dsrTarget = conv.back(dss.pot.dsr()) - 50;
-        uint256 ssrTarget = conv.back(susds.ssr()) + 50;
+        uint256 ilkTarget = conv.rtob(duty) - 50;
+        uint256 dsrTarget = conv.rtob(dss.pot.dsr()) - 50;
+        uint256 ssrTarget = conv.rtob(susds.ssr()) + 50;
 
         dss.jug.drip(ILK);
         dss.pot.drip();
@@ -210,9 +210,9 @@ contract DSPCTest is DssTest {
         dspc.put(updates);
 
         (duty,) = dss.jug.ilks(ILK);
-        assertEq(duty, conv.turn(ilkTarget));
-        assertEq(dss.pot.dsr(), conv.turn(dsrTarget));
-        assertEq(susds.ssr(), conv.turn(ssrTarget));
+        assertEq(duty, conv.btor(ilkTarget));
+        assertEq(dss.pot.dsr(), conv.btor(dsrTarget));
+        assertEq(susds.ssr(), conv.btor(ssrTarget));
     }
 
     function test_put_empty() public {
