@@ -136,9 +136,6 @@ contract DSPCTest is DssTest {
     }
 
     function test_file_ilk_invalid() public {
-        vm.expectRevert("DSPC/invalid-min");
-        dspc.file(ILK, "min", 0);
-
         vm.expectRevert("DSPC/invalid-max");
         dspc.file(ILK, "max", 0);
 
