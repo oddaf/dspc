@@ -26,6 +26,10 @@ interface DSPCLike {
 
 /// @title DSPC Mom - Emergency shutdown for DSPC
 /// @notice A contract that can halt the DSPC module in case of emergency
+/// @custom:authors [Oddaf]
+/// @custom:reviewers []
+/// @custom:auditors []
+/// @custom:bounties []
 contract DSPCMom {
     // --- Auth ---
     address public owner; // Owner address
