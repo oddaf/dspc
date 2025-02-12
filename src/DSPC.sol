@@ -56,10 +56,14 @@ contract DSPC {
     }
 
     // --- Immutables ---
-    JugLike public immutable jug; // Stability fee rates
-    PotLike public immutable pot; // DSR rate
-    SUSDSLike public immutable susds; // SSR rate
-    ConvLike public immutable conv; // Rate conversion utility
+    /// @notice Stability fee rates
+    JugLike public immutable jug;
+    /// @notice DSR rate
+    PotLike public immutable pot;
+    /// @notice SSR rate
+    SUSDSLike public immutable susds;
+    /// @notice Rate conversion utility
+    ConvLike public immutable conv;
 
     // --- Storage Variables ---
     /// @notice Mapping of admin addresses
@@ -72,12 +76,43 @@ contract DSPC {
     uint256 public bad;
 
     // --- Events ---
+    /**
+     * @notice `usr` was granted admin access.
+     * @param usr The user address.
+     */
     event Rely(address indexed usr);
+    /**
+     * @notice `usr` admin access was revoked.
+     * @param usr The user address.
+     */
     event Deny(address indexed usr);
+    /**
+     * @notice `usr` was granted permission to change rates (call put()).
+     * @param usr The user address.
+     */
     event Kiss(address indexed usr);
+    /**
+     * @notice Permission revoked for `usr` to change rates (call put()).
+     * @param usr The user address.
+     */
     event Diss(address indexed usr);
+    /**
+     * @notice A contract parameter was updated.
+     * @param what The changed parameter name. ["bad"].
+     * @param data The new value of the parameter.
+     */
     event File(bytes32 indexed what, uint256 data);
+    /**
+     * @notice A Ilk/DSR/SSR parameter was updated.
+     * @param id The Ilk/DSR/SSR identifier.
+     * @param what The changed parameter name. ["bad"].
+     * @param data The new value of the parameter.
+     */
     event File(bytes32 indexed id, bytes32 indexed what, uint256 data);
+    /**
+     * @notice A batch of rate changes was executed.
+     * @param updates Array of rate updates.
+     */
     event Put(ParamChange[] updates);
 
     // --- Modifiers ---
