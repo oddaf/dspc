@@ -19,7 +19,10 @@ pragma solidity 0.8.24;
 contract ConvMock {
     /// @notice The max bps supported in bps -> rate conversion.
     uint256 public constant MAX = 50_00;
+    /// @dev `ray` precision
     uint256 internal constant RAY = 10 ** 27;
+    /// @dev `bps` precision
+    uint256 internal constant BPS = 100_00;
 
     // Each rate takes 8 bytes (64 bits), total of 5001 rates
     // Each storage word (32 bytes) contains exactly 4 rates
@@ -60,7 +63,7 @@ contract ConvMock {
         uint256 yearlyRate = _rpow(ray, 365 days);
         // Subtract RAY to get the yearly rate delta and convert to basis points
         // Add RAY/2 for rounding: ensures values are rounded up when >= 0.5 and down when < 0.5
-        return ((yearlyRate - RAY) * 10000 + RAY / 2) / RAY;
+        return ((yearlyRate - RAY) * BPS + RAY / 2) / RAY;
     }
 
     /// @notice Exponentiate `x` (RAY, 27 decimal places) to `n` () by squaring
