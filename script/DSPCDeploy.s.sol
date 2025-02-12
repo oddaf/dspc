@@ -45,7 +45,6 @@ contract DSPCDeployScript is Script {
             DSPCDeployParams({
                 deployer: msg.sender,
                 owner: pauseProxy,
-                authority: address(dss.chainlog.getAddress("MCD_ADM")),
                 jug: address(dss.jug),
                 pot: address(dss.pot),
                 susds: dss.chainlog.getAddress("SUSDS"),

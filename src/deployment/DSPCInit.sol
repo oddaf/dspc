@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 Dai Foundation <www.daifoundation.org>
+// SPDX-FileCopyrightText: © 2023 Dai Foundation <www.daifoundation.org>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // This program is free software: you can redistribute it and/or modify
@@ -13,30 +13,27 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 pragma solidity ^0.8.24;
 
-import {ScriptTools} from "dss-test/ScriptTools.sol";
-import {DSPC} from "../DSPC.sol";
-import {DSPCMom} from "../DSPCMom.sol";
+import {DssInstance} from "dss-test/MCD.sol";
 import {DSPCInstance} from "./DSPCInstance.sol";
 
-struct DSPCDeployParams {
-    address deployer;
-    address owner;
-    address jug;
-    address pot;
-    address susds;
-    address conv;
+interface SUSDSLike {
+    function rely(address usr) external;
 }
 
-library DSPCDeploy {
-    function deploy(DSPCDeployParams memory params) internal returns (DSPCInstance memory inst) {
-        inst.dspc = new DSPC(params.jug, params.pot, params.susds, params.conv);
+library DSPCInit {
+    /**
+     * @dev Initializes a DSPC instance.
+     * @param dss The DSS instance.
+     * @param inst The DSCP instance.
+     */
+    function init(DssInstance memory dss, DSPCInstance memory inst) internal {
+        inst.dspc.rely(address(inst.mom));
+        inst.mom.setAuthority(dss.chainlog.getAddress("MCD_ADM"));
 
-        inst.mom = new DSPCMom();
-
-        ScriptTools.switchOwner(address(inst.dspc), params.deployer, params.owner);
-        inst.mom.setOwner(params.owner);
+        dss.jug.rely(address(inst.dspc));
+        dss.pot.rely(address(inst.dspc));
+        SUSDSLike(dss.chainlog.getAddress("SUSDS")).rely(address(inst.dspc));
     }
 }
