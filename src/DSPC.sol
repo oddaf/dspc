@@ -247,7 +247,7 @@ contract DSPC {
                 oldBps = conv.rtob(duty);
             }
 
-            uint256 delta = bps > oldBps ? bps - oldBps : oldBps - bps;
+            uint256 delta = _absDiff(bps, oldBps);
             require(delta <= cfg.step, "DSPC/delta-above-step");
 
             // Execute the update
@@ -265,6 +265,14 @@ contract DSPC {
         }
 
         emit Put(updates);
+    }
+
+    /// @notice Calculates absolute difference between two uint256 values
+    /// @param a The first uint256 value
+    /// @param b The second uint256 value
+    /// @return delta The absolute difference between the parameters
+    function _absDiff(uint256 a, uint256 b) internal pure returns (uint256 delta) {
+        delta = a > b ? a - b : b - a;
     }
 
     // --- Getters ---
