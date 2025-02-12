@@ -18,17 +18,20 @@ pragma solidity ^0.8.24;
 
 interface JugLike {
     function file(bytes32 ilk, bytes32 what, uint256 data) external;
-    function ilks(bytes32) external view returns (uint256 duty, uint256 rho);
+    function ilks(bytes32 ilk) external view returns (uint256 duty, uint256 rho);
+    function drip(bytes32 ilk) external;
 }
 
 interface PotLike {
     function file(bytes32 what, uint256 data) external;
     function dsr() external view returns (uint256);
+    function drip() external;
 }
 
 interface SUSDSLike {
     function file(bytes32 what, uint256 data) external;
     function ssr() external view returns (uint256);
+    function drip() external;
 }
 
 interface ConvLike {
@@ -215,10 +218,13 @@ contract DSPC {
             // Execute the update
             uint256 ray = conv.btor(bps);
             if (id == "DSR") {
+                pot.drip();
                 pot.file("dsr", ray);
             } else if (id == "SSR") {
+                susds.drip();
                 susds.file("ssr", ray);
             } else {
+                jug.drip(id);
                 jug.file(id, "duty", ray);
             }
         }

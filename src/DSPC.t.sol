@@ -31,7 +31,6 @@ interface ConvLike {
 interface SUSDSLike {
     function wards(address usr) external view returns (uint256);
     function ssr() external view returns (uint256);
-    function drip() external;
 }
 
 interface ProxyLike {
@@ -182,7 +181,6 @@ contract DSPCTest is DssTest {
     function test_put_ilk() public {
         (uint256 duty,) = dss.jug.ilks(ILK);
         uint256 target = conv.rtob(duty) + 50;
-        dss.jug.drip(ILK);
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
         updates[0] = DSPC.ParamChange(ILK, target);
@@ -196,7 +194,6 @@ contract DSPCTest is DssTest {
 
     function test_put_dsr() public {
         uint256 target = conv.rtob(dss.pot.dsr()) + 50;
-        dss.pot.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
         updates[0] = DSPC.ParamChange(DSR, target);
@@ -210,7 +207,6 @@ contract DSPCTest is DssTest {
     function test_put_ssr() public {
         vm.prank(bud);
         uint256 target = conv.rtob(susds.ssr()) - 50;
-        susds.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](1);
         updates[0] = DSPC.ParamChange(SSR, target);
@@ -226,10 +222,6 @@ contract DSPCTest is DssTest {
         uint256 ilkTarget = conv.rtob(duty) - 50;
         uint256 dsrTarget = conv.rtob(dss.pot.dsr()) - 50;
         uint256 ssrTarget = conv.rtob(susds.ssr()) + 50;
-
-        dss.jug.drip(ILK);
-        dss.pot.drip();
-        susds.drip();
 
         DSPC.ParamChange[] memory updates = new DSPC.ParamChange[](3);
         updates[0] = DSPC.ParamChange(ILK, ilkTarget);
