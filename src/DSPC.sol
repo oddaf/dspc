@@ -41,7 +41,7 @@ interface ConvLike {
 
 /// @title Direct Stability Parameters Change Module
 /// @notice A module that allows direct changes to stability parameters with constraints
-/// @dev This contract manages stability parameters for ilks, DSR, and SSR with configurable 
+/// @dev This contract manages stability parameters for ilks, DSR, and SSR with configurable limits
 /// @custom:authors [Oddaf]
 /// @custom:reviewers []
 /// @custom:auditors []
